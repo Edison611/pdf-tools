@@ -2,7 +2,9 @@ name: Publish web image
 
 on:
   push:
-    branches: [main]
+    # master is this repo's default branch; main is listed so a future
+    # rename doesn't silently stop publishing.
+    branches: [master, main]
     paths:
       - "frontend/**"
       - ".github/workflows/publish-web.yml"

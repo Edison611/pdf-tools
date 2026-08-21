@@ -2,7 +2,9 @@ name: Publish api image
 
 on:
   push:
-    branches: [main]
+    # master is this repo's default branch; main is listed so a future
+    # rename doesn't silently stop publishing.
+    branches: [master, main]
     paths:
       - "backend/**"
       - ".github/workflows/publish-api.yml"
