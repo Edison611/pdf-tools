@@ -1,11 +1,13 @@
+import json
 import os
 import shutil
 import tempfile
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 
 from utils.combine_pdfs import combine_pdfs
+from utils.pdf_pages import PdfError, extract_pages, render_page_previews
 
 # Kept under the 32 MiB request ceiling most serverless platforms impose.
 MAX_TOTAL_UPLOAD_BYTES = 25 * 1024 * 1024
@@ -20,6 +22,31 @@ app = FastAPI(title="PDF Tools API")
 @app.get("/health")
 def read_health():
     return {"message": "PDF Tools API is running"}
+
+
+async def _read_upload(upload: UploadFile, limit: int = MAX_TOTAL_UPLOAD_BYTES) -> bytes:
+    """Read an upload into memory, refusing anything over `limit`."""
+    chunks: list[bytes] = []
+    total = 0
+    while chunk := await upload.read(READ_CHUNK_BYTES):
+        total += len(chunk)
+        if total > limit:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Upload exceeds {limit // (1024 * 1024)} MB.",
+            )
+        chunks.append(chunk)
+    if total == 0:
+        raise HTTPException(status_code=400, detail="The uploaded file is empty.")
+    return b"".join(chunks)
+
+
+def _pdf_response(body: bytes, filename: str) -> Response:
+    return Response(
+        content=body,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.post("/combine-pdfs")
@@ -68,8 +95,48 @@ async def combine_pdfs_route(files: list[UploadFile] = File(...)):
         # platforms that throttle CPU once the response has been sent.
         shutil.rmtree(temp_dir, ignore_errors=True)
 
-    return Response(
-        content=body,
-        media_type="application/pdf",
-        headers={"Content-Disposition": 'attachment; filename="combined.pdf"'},
-    )
+    return _pdf_response(body, "combined.pdf")
+
+
+@app.post("/pdf-pages")
+@app.post("/pdf-pages/", include_in_schema=False)
+async def pdf_pages_route(file: UploadFile = File(...)):
+    """Return a thumbnail of every page, for page-level editing UIs."""
+    data = await _read_upload(file)
+    try:
+        pages = render_page_previews(data)
+    except PdfError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"pageCount": len(pages), "pages": pages}
+
+
+@app.post("/extract-pages")
+@app.post("/extract-pages/", include_in_schema=False)
+async def extract_pages_route(
+    file: UploadFile = File(...),
+    pages: str = Form(..., description="JSON array of 0-based page indexes, in output order"),
+):
+    """Build a new PDF from the given page indexes, in the order supplied."""
+    data = await _read_upload(file)
+
+    try:
+        order = json.loads(pages)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=422, detail="`pages` must be a JSON array of page indexes."
+        ) from exc
+
+    # bool is a subclass of int, so exclude it explicitly.
+    if not isinstance(order, list) or any(
+        isinstance(index, bool) or not isinstance(index, int) for index in order
+    ):
+        raise HTTPException(
+            status_code=422, detail="`pages` must be a JSON array of integers."
+        )
+
+    try:
+        body = extract_pages(data, order)
+    except PdfError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return _pdf_response(body, "extracted.pdf")
