@@ -1,0 +1,81 @@
+name: Build and publish image
+
+# Reusable: called by publish-web.yml and publish-api.yml, which own the
+# path filters that decide when each image needs rebuilding.
+
+on:
+  workflow_call:
+    inputs:
+      context:
+        description: Build context directory, e.g. ./frontend
+        required: true
+        type: string
+      image_name:
+        description: Docker Hub repository name (without the username), e.g. pdf-tools-web
+        required: true
+        type: string
+      platforms:
+        description: Target platforms. Add linux/arm64 only if you need it — it roughly doubles build time.
+        required: false
+        type: string
+        default: linux/amd64
+    secrets:
+      DOCKERHUB_TOKEN:
+        required: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Cross-architecture emulation, only needed when building for non-amd64.
+      - name: Set up QEMU
+        if: inputs.platforms != 'linux/amd64'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Derive tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/${{ inputs.image_name }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha
+            type=ref,event=tag
+          labels: |
+            org.opencontainers.image.title=${{ inputs.image_name }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+      # The frontend image runs `next build` (and therefore tsc) during this
+      # step, so type errors fail the workflow before anything is published.
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.context }}
+          platforms: ${{ inputs.platforms }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Layer cache keyed per workflow, so web and api never evict each other.
+          cache-from: type=gha,scope=${{ github.workflow }}
+          cache-to: type=gha,mode=max,scope=${{ github.workflow }}
+
+      - name: Summary
+        run: |
+          echo "### Published \`${{ inputs.image_name }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

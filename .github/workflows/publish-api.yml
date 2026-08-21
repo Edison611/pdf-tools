@@ -1,0 +1,24 @@
+name: Publish api image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/publish-api.yml"
+      - ".github/workflows/docker-publish.yml"
+      # Docs-only edits don't change the image.
+      - "!backend/**/*.md"
+  workflow_dispatch:
+
+concurrency:
+  group: publish-api-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    uses: ./.github/workflows/docker-publish.yml
+    with:
+      context: ./backend
+      image_name: pdf-tools-api
+    secrets: inherit

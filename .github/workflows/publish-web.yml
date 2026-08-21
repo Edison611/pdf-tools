@@ -1,0 +1,24 @@
+name: Publish web image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/publish-web.yml"
+      - ".github/workflows/docker-publish.yml"
+      # Docs-only edits don't change the image.
+      - "!frontend/**/*.md"
+  workflow_dispatch:
+
+concurrency:
+  group: publish-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    uses: ./.github/workflows/docker-publish.yml
+    with:
+      context: ./frontend
+      image_name: pdf-tools-web
+    secrets: inherit
