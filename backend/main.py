@@ -1,54 +1,75 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import FileResponse
-from fastapi.middleware.cors import CORSMiddleware
-import shutil
 import os
-import uuid
+import shutil
+import tempfile
+
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import Response
+
 from utils.combine_pdfs import combine_pdfs
 
+# Kept under the 32 MiB request ceiling most serverless platforms impose.
+MAX_TOTAL_UPLOAD_BYTES = 25 * 1024 * 1024
+READ_CHUNK_BYTES = 1024 * 1024
 
-app = FastAPI()
+app = FastAPI(title="PDF Tools API")
 
-# Allow CORS for local frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# No CORS middleware on purpose: the browser talks to the Next.js server,
+# which proxies /api/pdf/* here over the internal network. Same origin.
+
 
 @app.get("/health")
 def read_health():
     return {"message": "PDF Tools API is running"}
 
-# Route to combine multiple uploaded PDFs
-@app.post("/combine-pdfs/")
+
+@app.post("/combine-pdfs")
+# Next.js strips trailing slashes before applying rewrites, so the canonical
+# path has none. The slashed alias keeps direct callers (curl, older clients)
+# from bouncing through a 307 that redirects to an unreachable internal host.
+@app.post("/combine-pdfs/", include_in_schema=False)
 async def combine_pdfs_route(files: list[UploadFile] = File(...)):
+    """Merge uploaded PDFs in the order they were received."""
     if len(files) < 2:
         raise HTTPException(status_code=400, detail="At least two PDF files are required.")
 
-    temp_dir = f"temp_{uuid.uuid4().hex}"
-    os.makedirs(temp_dir, exist_ok=True)
-    pdf_paths = []
+    # mkdtemp() honors TMPDIR and is writable by an unprivileged container
+    # user, unlike a relative path under the app's working directory.
+    temp_dir = tempfile.mkdtemp(prefix="combine-")
     try:
-        # Save uploaded files to temp directory
-        for file in files:
-            file_path = os.path.join(temp_dir, file.filename)
-            with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-            pdf_paths.append(file_path)
+        pdf_paths: list[str] = []
+        total_bytes = 0
 
-        # Output file path
+        for index, upload in enumerate(files):
+            # Client filenames are ignored entirely: they can contain path
+            # traversal ("../../x") and duplicates would overwrite each other.
+            # The index keeps the caller's ordering.
+            path = os.path.join(temp_dir, f"{index:03d}.pdf")
+            with open(path, "wb") as buffer:
+                while chunk := await upload.read(READ_CHUNK_BYTES):
+                    total_bytes += len(chunk)
+                    if total_bytes > MAX_TOTAL_UPLOAD_BYTES:
+                        raise HTTPException(
+                            status_code=413,
+                            detail=(
+                                "Total upload exceeds "
+                                f"{MAX_TOTAL_UPLOAD_BYTES // (1024 * 1024)} MB."
+                            ),
+                        )
+                    buffer.write(chunk)
+            pdf_paths.append(path)
+
         output_path = os.path.join(temp_dir, "combined.pdf")
         combine_pdfs(pdf_paths, output_path)
 
-        return FileResponse(output_path, filename="combined.pdf", media_type="application/pdf")
+        with open(output_path, "rb") as merged:
+            body = merged.read()
     finally:
-        # Clean up temp files after response is sent
-        import threading
-        import time
-        def cleanup(path):
-            time.sleep(5)
-            shutil.rmtree(path, ignore_errors=True)
-        threading.Thread(target=cleanup, args=(temp_dir,), daemon=True).start()
+        # Synchronous cleanup: background threads are unreliable on serverless
+        # platforms that throttle CPU once the response has been sent.
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    return Response(
+        content=body,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="combined.pdf"'},
+    )

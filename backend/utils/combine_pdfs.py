@@ -1,6 +1,5 @@
 
-import fitz  # PyMuPDF
-import sys
+import pymupdf  # the `fitz` alias is deprecated and slated for removal
 import os
 import logging
 
@@ -22,10 +21,10 @@ def combine_pdfs(pdf_paths, output_path):
     logger.info(f"Combining {len(pdf_paths)} PDFs into {output_path}")
 
     # Open all PDFs
-    pdf_docs = [fitz.open(path) for path in pdf_paths]
+    pdf_docs = [pymupdf.open(path) for path in pdf_paths]
 
     # Create a new PDF
-    combined = fitz.open()
+    combined = pymupdf.open()
 
     # Insert all PDFs
     for pdf in pdf_docs:

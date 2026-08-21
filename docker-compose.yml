@@ -1,0 +1,43 @@
+name: pdf-tools
+
+services:
+  # FastAPI + PyMuPDF. Deliberately has no host-facing port of its own.
+  api:
+    build: ./backend
+    image: pdf-tools-api:local
+    container_name: pdf-tools-api
+    environment:
+      PORT: "8081"
+    # `web` shares this container's network namespace (see below), so every
+    # host-facing port for the stack is published here.
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8081/health")
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  # Next.js server. Handles all browser traffic and proxies /api/pdf/* to the
+  # API over localhost.
+  web:
+    build: ./frontend
+    image: pdf-tools-web:local
+    container_name: pdf-tools-web
+    # Mirrors a Cloud Run multi-container service: both containers share one
+    # network namespace, so http://127.0.0.1:8081 resolves to the API here and
+    # in production without rebuilding the image.
+    #
+    # Prefer normal bridge networking? Drop this line, move `ports` here, and
+    # rebuild with: docker compose build --build-arg API_ORIGIN=http://api:8081
+    network_mode: "service:api"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped

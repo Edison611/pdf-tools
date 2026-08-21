@@ -8,7 +8,10 @@ type PdfItem = {
   file: File;
 };
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+// Same-origin path; next.config.ts rewrites it to the FastAPI service.
+// No trailing slash: Next strips it before rewriting, which would leave the
+// backend redirecting to an internal host the browser cannot reach.
+const COMBINE_ENDPOINT = "/api/pdf/combine-pdfs";
 
 function isPdf(file: File) {
   return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
@@ -121,7 +124,7 @@ export default function CombinePage() {
     });
 
     try {
-      const res = await fetch(`${BACKEND_URL}/combine-pdfs/`, { method: "POST", body: formData });
+      const res = await fetch(COMBINE_ENDPOINT, { method: "POST", body: formData });
       if (!res.ok) {
         const detail = await res
           .json()
