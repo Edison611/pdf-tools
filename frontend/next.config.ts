@@ -14,6 +14,15 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [{ source: "/api/pdf/:path*", destination: `${API_ORIGIN}/:path*` }];
   },
+
+  experimental: {
+    // Next's proxy buffers the whole body before forwarding it and defaults
+    // to a 10MB cap, silently truncating anything larger (no error to the
+    // client — just a mangled multipart body and a backend connection
+    // reset). Match the backend's own ceiling (MAX_TOTAL_UPLOAD_BYTES in
+    // backend/main.py) so multi-file combines aren't cut off first.
+    proxyClientMaxBodySize: "25mb",
+  },
 };
 
 export default nextConfig;
