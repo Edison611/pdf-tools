@@ -1,0 +1,18 @@
+name: pdf-tools
+
+# Override for local development: builds from source instead of pulling from
+# Docker Hub. Use together with the base file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# `image:` is kept so the resulting images have a stable, obviously-local tag
+# instead of inheriting the Docker Hub repo name from the base file.
+
+services:
+  api:
+    image: pdf-tools-api:local
+    build: ./backend
+
+  web:
+    image: pdf-tools-web:local
+    build: ./frontend

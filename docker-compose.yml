@@ -1,10 +1,15 @@
 name: pdf-tools
 
+# Pulls the published images from Docker Hub (built by .github/workflows/*).
+# This is the "run the real thing" file — no source checkout required.
+#
+# For local development against your own backend/frontend changes, use
+# docker-compose.dev.yml as an override instead (see README.md).
+
 services:
   # FastAPI + PyMuPDF. Deliberately has no host-facing port of its own.
   api:
-    build: ./backend
-    image: pdf-tools-api:local
+    image: ${DOCKERHUB_USERNAME}/pdf-tools-api:latest
     container_name: pdf-tools-api
     environment:
       PORT: "8081"
@@ -27,15 +32,11 @@ services:
   # Next.js server. Handles all browser traffic and proxies /api/pdf/* to the
   # API over localhost.
   web:
-    build: ./frontend
-    image: pdf-tools-web:local
+    image: ${DOCKERHUB_USERNAME}/pdf-tools-web:latest
     container_name: pdf-tools-web
     # Mirrors a Cloud Run multi-container service: both containers share one
     # network namespace, so http://127.0.0.1:8081 resolves to the API here and
     # in production without rebuilding the image.
-    #
-    # Prefer normal bridge networking? Drop this line, move `ports` here, and
-    # rebuild with: docker compose build --build-arg API_ORIGIN=http://api:8081
     network_mode: "service:api"
     depends_on:
       api:
