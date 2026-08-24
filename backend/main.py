@@ -7,6 +7,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 
 from utils.combine_pdfs import combine_pdfs
+from utils.images_to_pdf import ImageError, images_to_pdf
 from utils.pdf_pages import PdfError, extract_pages, render_page_previews
 
 # Kept under the 32 MiB request ceiling most serverless platforms impose.
@@ -96,6 +97,37 @@ async def combine_pdfs_route(files: list[UploadFile] = File(...)):
         shutil.rmtree(temp_dir, ignore_errors=True)
 
     return _pdf_response(body, "combined.pdf")
+
+
+@app.post("/images-to-pdf")
+@app.post("/images-to-pdf/", include_in_schema=False)
+async def images_to_pdf_route(files: list[UploadFile] = File(...)):
+    """Build a PDF with one page per uploaded image, in the order received."""
+    if len(files) < 1:
+        raise HTTPException(status_code=400, detail="At least one image file is required.")
+
+    images: list[bytes] = []
+    total_bytes = 0
+    for upload in files:
+        chunks: list[bytes] = []
+        while chunk := await upload.read(READ_CHUNK_BYTES):
+            total_bytes += len(chunk)
+            if total_bytes > MAX_TOTAL_UPLOAD_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Total upload exceeds {MAX_TOTAL_UPLOAD_BYTES // (1024 * 1024)} MB.",
+                )
+            chunks.append(chunk)
+        if not chunks:
+            raise HTTPException(status_code=400, detail="One of the uploaded images is empty.")
+        images.append(b"".join(chunks))
+
+    try:
+        body = images_to_pdf(images)
+    except ImageError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return _pdf_response(body, "images.pdf")
 
 
 @app.post("/pdf-pages")

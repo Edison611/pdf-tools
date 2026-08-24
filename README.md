@@ -37,9 +37,39 @@ docker compose build
 This pulls `DOCKERHUB_USERNAME/pdf-tools-api:latest` and
 `DOCKERHUB_USERNAME/pdf-tools-web:latest`.
 
-On Windows, `run-local.cmd` / `stop-local.cmd` wrap the dev build + run
-commands and also open http://localhost:8080 once the API health check
-passes.
+## Running the containers
+
+### Dev (local source)
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+```
+
+Add `--build` to rebuild first (equivalent to running the build command above
+before `up`). Tail logs and stop with:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f
+docker compose -f docker-compose.yml -f docker-compose.dev.yml down
+```
+
+### Prod (Docker Hub image)
+
+```bash
+docker compose up -d
+```
+
+`DOCKERHUB_USERNAME` must be set (env var or `.env` file) as in the build step
+above. Tail logs and stop with:
+
+```bash
+docker compose logs -f
+docker compose down
+```
+
+Once running (either mode), the app is at http://localhost:8080. The `api`
+service has a health check, so `web` won't start until the API is ready;
+`docker compose ps` shows current status.
 
 ## CI-published images
 

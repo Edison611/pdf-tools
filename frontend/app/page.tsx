@@ -27,16 +27,16 @@ const tools: Tool[] = [
     ),
   },
   {
-    href: "/split",
-    name: "Split PDF",
-    description: "Break one document into separate files at the page ranges you pick.",
-    iconClass: "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-400",
-    hoverBorderClass: "hover:border-emerald-500/40 dark:hover:border-emerald-400/40",
+    href: "/images-to-pdf",
+    name: "Images to PDF",
+    description: "Turn a batch of photos or scans into a single PDF, one page per image.",
+    iconClass: "bg-orange-500/10 text-orange-600 dark:bg-orange-400/10 dark:text-orange-400",
+    hoverBorderClass: "hover:border-orange-500/40 dark:hover:border-orange-400/40",
     icon: (
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
-        d="M12 3v4m0 10v4M4 12h16M7 7h2m6 0h2M7 17h2m6 0h2"
+        d="M4 16l4.5-4.5a2 2 0 0 1 2.83 0L15 15m-2-2 1.5-1.5a2 2 0 0 1 2.83 0L20 14M4 8h.01M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"
       />
     ),
   },
