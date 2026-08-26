@@ -7,6 +7,8 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 
 from utils.combine_pdfs import combine_pdfs
+from utils.compress_pdf import PdfError as CompressPdfError
+from utils.compress_pdf import compress_pdf
 from utils.images_to_pdf import ImageError, images_to_pdf
 from utils.pdf_pages import PdfError, extract_pages, render_page_previews
 
@@ -172,3 +174,20 @@ async def extract_pages_route(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return _pdf_response(body, "extracted.pdf")
+
+
+@app.post("/compress-pdf")
+@app.post("/compress-pdf/", include_in_schema=False)
+async def compress_pdf_route(
+    file: UploadFile = File(...),
+    level: str = Form("medium", description="Compression level: low, medium, or high"),
+):
+    """Recompress a PDF's embedded images to reduce file size."""
+    data = await _read_upload(file)
+
+    try:
+        body = compress_pdf(data, level)
+    except CompressPdfError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return _pdf_response(body, "compressed.pdf")
