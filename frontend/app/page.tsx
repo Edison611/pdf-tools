@@ -68,6 +68,20 @@ const tools: Tool[] = [
       />
     ),
   },
+  {
+    href: "/ocr",
+    name: "Make Searchable",
+    description: "Run OCR on a scanned PDF to add a hidden text layer for search and copy.",
+    iconClass: "bg-teal-500/10 text-teal-600 dark:bg-teal-400/10 dark:text-teal-400",
+    hoverBorderClass: "hover:border-teal-500/40 dark:hover:border-teal-400/40",
+    icon: (
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5m-6-9 6 6m0-6v6h-6M9 15l2-2 2 2 3-3"
+      />
+    ),
+  },
 ];
 
 const highlights = ["Runs on your machine", "No sign-up", "Files never leave your network"];

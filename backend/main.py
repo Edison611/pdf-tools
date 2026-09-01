@@ -5,11 +5,14 @@ import tempfile
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
+from starlette.concurrency import run_in_threadpool
 
 from utils.combine_pdfs import combine_pdfs
 from utils.compress_pdf import PdfError as CompressPdfError
 from utils.compress_pdf import compress_pdf
 from utils.images_to_pdf import ImageError, images_to_pdf
+from utils.ocr_pdf import PdfError as OcrPdfError
+from utils.ocr_pdf import ocr_pdf
 from utils.pdf_pages import PdfError, extract_pages, render_page_previews
 
 # Kept under the 32 MiB request ceiling most serverless platforms impose.
@@ -191,3 +194,22 @@ async def compress_pdf_route(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return _pdf_response(body, "compressed.pdf")
+
+
+@app.post("/ocr-pdf")
+@app.post("/ocr-pdf/", include_in_schema=False)
+async def ocr_pdf_route(file: UploadFile = File(...)):
+    """Add a hidden, searchable text layer to a scanned/image-only PDF.
+
+    OCR is CPU-bound and roughly three orders of magnitude slower than
+    normal text extraction, so it runs in a worker thread to keep the event
+    loop free for other requests (e.g. the health check) while it runs.
+    """
+    data = await _read_upload(file)
+
+    try:
+        body = await run_in_threadpool(ocr_pdf, data)
+    except OcrPdfError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return _pdf_response(body, "ocr.pdf")
